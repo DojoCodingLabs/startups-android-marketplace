@@ -1,0 +1,65 @@
+name: Deploy F-Droid Repo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apks/**'
+      - 'metadata/**'
+      - 'config.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    name: Build repo index and deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install fdroidserver
+        run: pip install fdroidserver
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Restore repo signing keystore
+        run: |
+          echo "$FDROID_KEYSTORE_BASE64" | base64 -d > keystore.p12
+        env:
+          FDROID_KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}
+
+      - name: Copy APKs to repo directory
+        run: |
+          mkdir -p repo
+          find apks -name '*.apk' -exec cp {} repo/ \;
+          ls -la repo/*.apk 2>/dev/null || echo "No APKs found"
+
+      - name: Generate repo index
+        run: fdroid update --create-metadata --verbose
+        env:
+          FDROID_KEY_STORE_PASS: ${{ secrets.FDROID_KEY_STORE_PASS }}
+          FDROID_KEY_PASS: ${{ secrets.FDROID_KEY_PASS }}
+
+      - name: Verify repo index
+        run: |
+          test -f repo/index-v2.json || { echo "FAIL: index not generated"; exit 1; }
+          python3 -c "
+          import json
+          data = json.load(open('repo/index-v2.json'))
+          count = len(data.get('packages', {}))
+          print(f'Apps in repo: {count}')
+          "
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'

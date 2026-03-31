@@ -1,0 +1,104 @@
+name: Validate App Submission
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apks/**'
+      - 'metadata/**'
+
+jobs:
+  validate:
+    name: Validate APK and metadata
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Find new APKs
+        id: apks
+        run: |
+          APKS=$(git diff --name-only origin/main...HEAD -- 'apks/*.apk' || true)
+          if [ -z "$APKS" ]; then
+            echo "No new APKs found in this PR"
+            echo "has_apks=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Found APKs:"
+            echo "$APKS"
+            echo "has_apks=true" >> "$GITHUB_OUTPUT"
+            # Write APK list to file to avoid injection via filenames
+            echo "$APKS" > /tmp/apk_list.txt
+          fi
+
+      - name: Verify APK signatures
+        if: steps.apks.outputs.has_apks == 'true'
+        run: |
+          while IFS= read -r apk; do
+            if [ -f "$apk" ]; then
+              echo "=== Verifying: $apk ==="
+              apksigner verify --print-certs "$apk"
+              if [ $? -ne 0 ]; then
+                echo "FAIL: $apk signature verification failed"
+                exit 1
+              fi
+              echo "PASS: Signature valid"
+            fi
+          done < /tmp/apk_list.txt
+
+      - name: Extract APK metadata
+        if: steps.apks.outputs.has_apks == 'true'
+        run: |
+          while IFS= read -r apk; do
+            if [ -f "$apk" ]; then
+              echo "=== Metadata: $apk ==="
+              aapt2 dump badging "$apk" | head -5
+              echo "---"
+              echo "Permissions:"
+              aapt2 dump permissions "$apk"
+              echo ""
+            fi
+          done < /tmp/apk_list.txt
+
+      - name: Validate metadata YAML
+        run: |
+          pip install pyyaml
+
+          for yml in metadata/*.yml; do
+            if [ -f "$yml" ]; then
+              echo "=== Validating: $yml ==="
+              python3 << 'PYEOF'
+          import yaml, sys, os
+
+          required = ['Categories', 'License', 'AuthorName', 'AutoName', 'Description', 'CurrentVersion', 'CurrentVersionCode']
+          yml_path = os.environ.get('YML_FILE', '')
+
+          with open(yml_path) as f:
+              data = yaml.safe_load(f)
+
+          missing = [field for field in required if field not in data]
+          if missing:
+              print(f'FAIL: Missing required fields: {missing}')
+              sys.exit(1)
+
+          print('PASS: All required fields present')
+          print(f'  App: {data["AutoName"]}')
+          print(f'  Version: {data["CurrentVersion"]} ({data["CurrentVersionCode"]})')
+          print(f'  License: {data["License"]}')
+          print(f'  Author: {data["AuthorName"]}')
+          PYEOF
+            fi
+          done
+        env:
+          YML_FILE: ${{ '' }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Submission Validation Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Validation complete. Check step logs for details." >> "$GITHUB_STEP_SUMMARY"

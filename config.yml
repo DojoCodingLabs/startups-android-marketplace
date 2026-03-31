@@ -1,0 +1,24 @@
+# fdroidserver configuration
+# See: https://f-droid.org/docs/Setup_an_F-Droid_App_Repo/
+
+repo_url: "https://marketplace.dojocoding.io/fdroid/repo"
+repo_name: "DojoCodingLabs Startups"
+repo_icon: "icon.png"
+repo_description: |
+  Android apps built by startups incubated and accelerated
+  through DojoCodingLabs hackathons and the DojoOS Launchpad.
+
+archive_older: 3
+
+# Keystore configuration (paths resolved at build time)
+keystore: "keystore.p12"
+keystorepass: env:FDROID_KEY_STORE_PASS
+keypass: env:FDROID_KEY_PASS
+repo_keyalias: "dojocoding-marketplace"
+keydname: "CN=DojoCodingLabs, OU=Marketplace, O=DojoCodingLabs, L=San Jose, C=CR"
+
+# Update check mode
+update_stats: false
+
+# Allow APKs signed by developers (not rebuilt from source)
+allow_disabled_algorithms: false
