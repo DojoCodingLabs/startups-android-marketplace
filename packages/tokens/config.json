@@ -1,0 +1,29 @@
+{
+  "source": ["tokens.json"],
+  "platforms": {
+    "css": {
+      "transformGroup": "css",
+      "buildPath": "build/css/",
+      "files": [
+        {
+          "destination": "variables.css",
+          "format": "css/variables",
+          "options": {
+            "outputReferences": true
+          }
+        }
+      ]
+    },
+    "dart": {
+      "transformGroup": "flutter",
+      "buildPath": "build/dart/",
+      "files": [
+        {
+          "destination": "tokens.dart",
+          "format": "flutter/class.dart",
+          "className": "DojoTokens"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@dojocoding/tokens",
+  "version": "0.1.0",
+  "description": "Dojo design tokens — Style Dictionary pipeline producing CSS variables and Dart constants",
+  "private": true,
+  "scripts": {
+    "build": "style-dictionary build --config config.json",
+    "clean": "rm -rf build"
+  },
+  "devDependencies": {
+    "style-dictionary": "^4.3.0"
+  }
+}
