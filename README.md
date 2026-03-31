@@ -10,8 +10,6 @@ Add this repository to your F-Droid client (Droid-ify, Neo Store, or F-Droid):
 https://marketplace.dojocoding.io/fdroid/repo
 ```
 
-Or scan the QR code: *(coming soon)*
-
 ## For Startup Developers
 
 ### Who Can Publish
@@ -22,86 +20,62 @@ Startups that have been incubated or accelerated through:
 
 Using the [flutter-go-to-market-toolkit](https://github.com/lapc506/flutter-go-to-market-toolkit) is recommended but not required.
 
-### How to Submit Your App
+### How to Get Your App Listed
 
-1. **Build a signed APK** of your release
-   ```bash
-   flutter build apk --release
-   ```
+You publish your APK on **your own repository**. We fetch it from there.
 
-2. **Fork this repository**
+1. **Publish a signed release APK** on your GitHub/GitLab/Codeberg repo (use GitHub Releases, GitLab Releases, etc.)
 
-3. **Add your APK** to `apks/<your.package.name>/`
-   ```
-   apks/com.yourstartup.app/com.yourstartup.app_1.apk
-   ```
+2. **Open an issue** in this repo using the [App Submission template](https://github.com/DojoCodingLabs/startups-android-marketplace/issues/new?template=app-submission.yml) with:
+   - Your repo URL
+   - Package name
+   - Which DojoCodingLabs program you participated in
+   - A brief app description
 
-4. **Create metadata** at `metadata/<your.package.name>.yml`
-   ```yaml
-   Categories:
-     - Utilities
-   License: MIT
-   AuthorName: Your Startup
-   AuthorEmail: dev@yourstartup.com
-   SourceCode: https://github.com/yourstartup/app
-   IssueTracker: https://github.com/yourstartup/app/issues
+3. **A maintainer reviews** your request, verifies your DojoCodingLabs connection, and adds your app's metadata to our index
 
-   AutoName: Your App Name
-   Description: |
-     Brief description of what your app does.
+4. **Our pipeline fetches your APK** from your release page, scans it, and adds it to the marketplace
 
-   X-DojoLaunchpad: true
-   X-DojoHackathon: "Hackathon 2026-Q1"
-
-   CurrentVersion: 1.0.0
-   CurrentVersionCode: 1
-   ```
-
-5. **Open a Pull Request** using the submission template
-
-6. **CI validates automatically** — signature, metadata, tracker scan
-
-7. **A maintainer reviews and merges** — your app is live within minutes
+5. **Users see your app** in Droid-ify / Neo Store when they add our repo
 
 ### Updating Your App
 
-Same process: add the new APK, update the version in metadata YAML, open a PR.
+Just publish a new release on your own repo. Our pipeline periodically checks for new versions and updates the marketplace automatically.
 
-### Submission Requirements
+### What You DON'T Need To Do
 
-| Requirement | Details |
-|-------------|---------|
-| APK signed | Must be signed with your release keystore |
-| Metadata YAML | Required fields: Categories, License, AuthorName, AutoName, Description |
-| Source code | Recommended to be open source (link in SourceCode field) |
-| Same signing key | Updates must use the same key as the original submission |
+- Fork this repo
+- Upload APKs here
+- Learn fdroidserver
+- Configure metadata YAML
 
-## Architecture
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the complete technical design: hosting, CI/CD pipeline, security model, and future roadmap.
-
-## Keep Android Open
-
-Starting September 2026, Google's Android Developer Verification Program may restrict app installation from alternative sources on stock Android. See [docs/KEEP_ANDROID_OPEN.md](docs/KEEP_ANDROID_OPEN.md) for our impact assessment and resilience strategy.
-
-**TL;DR:** This marketplace works today on any Android device. After September 2026, it will continue working on custom ROMs (GrapheneOS, CalyxOS, LineageOS) without any restrictions.
+We handle all of that. You just publish releases on your own repo.
 
 ## How It Works
 
 ```
-Developer submits APK + metadata via PR
-  → CI validates (signature, metadata, trackers)
-  → Maintainer merges
-  → fdroidserver regenerates signed index
+Startup publishes APK on their own GitHub Releases
+  → Startup opens issue requesting inclusion
+  → Maintainer adds metadata pointing to startup's repo
+  → Pipeline fetches APK from startup's release page
+  → APK scanned (signature, trackers)
+  → fdroidserver generates signed index
   → Vercel deploys to CDN
-  → Users see the new app in their F-Droid client
+  → Users see the app in their F-Droid client
 ```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the complete technical design.
+
+## Keep Android Open
+
+Starting September 2026, Google's Android Developer Verification Program may restrict app installation from alternative sources on stock Android. See [docs/KEEP_ANDROID_OPEN.md](docs/KEEP_ANDROID_OPEN.md) for our impact assessment and resilience strategy.
 
 ## Technology
 
 | Component | Tool |
 |-----------|------|
 | Repo generation | fdroidserver |
+| APK sourcing | Fetched from developer's own releases |
 | Hosting | Vercel (CDN + security headers) |
 | CI/CD | GitHub Actions |
 | APK validation | apksigner, aapt2 |

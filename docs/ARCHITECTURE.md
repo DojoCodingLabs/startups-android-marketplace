@@ -13,106 +13,94 @@ An F-Droid-compatible repository where startups incubated or accelerated through
 - Community-driven quality through transparent scanning
 
 ### Strategic Value (September 2026)
-Google's Android Developer Verification Program will require all developers to register centrally with Google, submit government ID, and upload signing keys. Apps from unregistered developers will be blocked. This marketplace provides an alternative distribution channel that:
-- Works today on any Android device via F-Droid clients
-- Continues working on custom ROMs (GrapheneOS, CalyxOS, LineageOS) regardless of Google's restrictions
-- Positions DojoCodingLabs as infrastructure provider, not just education
+Google's Android Developer Verification Program will require all developers to register centrally with Google, submit government ID, and upload signing keys. Apps from unregistered developers will be blocked. This marketplace provides an alternative distribution channel. See [KEEP_ANDROID_OPEN.md](KEEP_ANDROID_OPEN.md).
 
-## How F-Droid Repositories Work
+## Core Design Principle
 
-An F-Droid repo is a **signed static directory** served over HTTPS. It contains:
+**Developers publish on their own repos. We fetch from there.**
 
-```
-repo/
-├── index-v2.json          # Signed index with all app metadata
-├── index-v2.json.asc      # GPG signature of the index
-├── com.app.one_1.apk      # App APKs
-├── com.app.two_3.apk
-└── icons-640/             # App icons at various densities
-    ├── com.app.one.1.png
-    └── com.app.two.3.png
-```
+Unlike a traditional app store where developers upload artifacts, this marketplace works like IzzyOnDroid:
+- Startups publish signed APKs as GitHub/GitLab/Codeberg releases
+- Our metadata points to the startup's release URL
+- Our pipeline fetches, scans, and indexes the APK
+- The startup never touches this repo directly
 
-Any F-Droid client (Droid-ify, Neo Store, F-Droid Basic) can add a repo URL and browse/install apps from it. The client verifies the index signature against the repo's public key.
-
-**`fdroidserver`** is the official Python tool that generates and maintains this structure. It:
-- Reads APKs and extracts metadata (package name, version, permissions, icons)
-- Generates the signed index
-- Manages app versions and updates
+This means:
+- Developers control their own release cadence
+- No need to learn fdroidserver or F-Droid metadata format
+- Updates are detected automatically
+- APKs are always the official developer-signed build
 
 ## Architecture
 
 ```
-Developer submits APK via Pull Request
+Startup's own repo (GitHub Releases)
          │
-         ▼
-┌─────────────────────────┐
-│  validate-submission.yml │  ← GitHub Actions
-│  - apksigner verify      │
-│  - aapt2 dump metadata   │
-│  - exodus-standalone scan │
-│  - YAML metadata lint     │
-└──────────┬──────────────┘
-           │ PR passes checks
-           ▼
-   Maintainer reviews + merges
+         │ Maintainer adds metadata
+         ▼ pointing to startup's repo
+┌─────────────────────────────┐
+│  metadata/                   │
+│  com.startup.app.yml         │  ← This repo
+│    SourceCode: github.com/…  │
+│    UpdateCheckMode: Tags     │
+└──────────┬──────────────────┘
            │
            ▼
-┌─────────────────────────┐
-│    deploy-repo.yml       │  ← GitHub Actions
-│  - fdroidserver update   │
-│  - Generate signed index │
-│  - Deploy to Vercel      │
-└──────────┬──────────────┘
+┌─────────────────────────────┐
+│  update-and-deploy.yml       │  ← GitHub Actions (scheduled + on push)
+│  1. fdroid checkupdates      │     Checks all metadata for new releases
+│  2. Fetch new APKs           │     Downloads from startup's repo
+│  3. apksigner verify         │     Validates signature
+│  4. exodus-standalone scan   │     Tracker detection (informational)
+│  5. fdroid update            │     Regenerates signed index
+│  6. Deploy to Vercel         │     Static files to CDN
+└──────────┬──────────────────┘
            │
            ▼
-┌─────────────────────────┐
-│       Vercel CDN         │
-│  marketplace.dojocoding.io │
-│  Static files served     │
-│  with security headers   │
-└──────────┬──────────────┘
+┌─────────────────────────────┐
+│  Vercel CDN                  │
+│  marketplace.dojocoding.io   │
+│  repo/index-v2.json          │
+│  repo/*.apk                  │
+└──────────┬──────────────────┘
            │
            ▼
-   User adds repo URL in
-   Droid-ify / Neo Store
+   User's F-Droid client
+   (Droid-ify, Neo Store)
 ```
 
-## Hosting: Vercel
+## Repository Structure
 
-Following the same deployment pattern as DojoOS:
+```
+startups-android-marketplace/
+├── .github/
+│   ├── workflows/
+│   │   ├── update-and-deploy.yml    # Fetch APKs + rebuild index + deploy
+│   │   └── validate-metadata.yml    # Lint metadata YAML on PR
+│   ├── ISSUE_TEMPLATE/
+│   │   └── app-submission.yml       # Issue template for new submissions
+│   └── PULL_REQUEST_TEMPLATE.md
+├── docs/
+│   ├── ARCHITECTURE.md              # This file
+│   ├── KEEP_ANDROID_OPEN.md         # Impact assessment + resilience plan
+│   └── SUBMISSION_GUIDE.md          # Guide for maintainers adding apps
+├── metadata/                        # One YAML file per app
+│   └── com.startup.appname.yml
+├── config.yml                       # fdroidserver configuration
+├── vercel.json                      # Hosting config with security headers
+├── .gitignore                       # Excludes repo/, keystores
+├── LICENSE
+└── README.md
+```
 
-- **Vercel** serves the static `repo/` directory globally via CDN
-- **Security headers** (HSTS, X-Content-Type-Options, X-Frame-Options)
-- **APK caching** — immutable cache for versioned APK files
-- **Custom domain** — `marketplace.dojocoding.io` or `apps.dojocoding.io`
-- **Multi-environment** — staging branch for validation, main for production
+**What is NOT in this repo:**
+- APK files (fetched at build time from developer repos)
+- The `repo/` directory (generated by fdroidserver, deployed to Vercel)
+- Signing keystores (stored as GitHub Actions secrets)
 
-## Submission Pipeline
+## Metadata Format
 
-### For Developers
-
-1. Fork this repo
-2. Add your signed APK to `apks/<package-name>/`
-3. Create metadata YAML in `metadata/<package-name>.yml`
-4. Open a Pull Request using the submission template
-5. CI validates automatically (signature, metadata, tracker scan)
-6. A DojoCodingLabs maintainer reviews and merges
-7. Your app appears in the marketplace within minutes
-
-### Validation Checks (CI)
-
-| Check | Tool | Blocks merge? |
-|-------|------|--------------|
-| APK signature valid | `apksigner verify` | Yes |
-| Package name matches metadata | `aapt2 dump badging` | Yes |
-| Required metadata fields present | Custom YAML validator | Yes |
-| Tracker scan | `exodus-standalone` | Warning only (informational) |
-| Permissions audit | `aapt2 dump permissions` | Warning only |
-
-### Metadata Format
-
-Each app needs a YAML file in `metadata/`:
+Each app has one YAML file in `metadata/`. This is managed by maintainers, not developers.
 
 ```yaml
 # metadata/com.startup.appname.yml
@@ -126,87 +114,105 @@ IssueTracker: https://github.com/startup/app/issues
 
 AutoName: App Name
 Description: |
-  A brief description of what the app does.
+  Brief description of what the app does.
 
-# DojoCodingLabs fields
+RepoType: git
+Repo: https://github.com/startup/app.git
+
+# How to detect new versions
+UpdateCheckMode: Tags
+AutoUpdateMode: Version
+
+# DojoCodingLabs-specific fields
 X-DojoLaunchpad: true
 X-DojoHackathon: "Hackathon 2026-Q1"
-X-DojoToolkit: flutter-go-to-market-toolkit  # Recommended, not required
+X-DojoToolkit: flutter-go-to-market-toolkit
 
 CurrentVersion: 1.0.0
 CurrentVersionCode: 1
 ```
 
+Key fields:
+- `RepoType: git` + `Repo:` — tells fdroidserver where to find releases
+- `UpdateCheckMode: Tags` — detect new versions from git tags
+- `AutoUpdateMode: Version` — auto-update metadata when new tags appear
+
+## Hosting: Vercel
+
+Following the same deployment pattern as DojoOS:
+- **Vercel** serves the generated `repo/` directory globally via CDN
+- **Security headers** (HSTS, X-Content-Type-Options, X-Frame-Options)
+- **APK caching** — immutable 1-year cache for versioned APK files
+- **Index caching** — 5-minute TTL (clients check for updates frequently)
+- **Custom domain** — `marketplace.dojocoding.io`
+
+## Update Pipeline
+
+The pipeline runs on two triggers:
+
+1. **Scheduled** (e.g., daily) — checks all app repos for new releases
+2. **On push to main** — when a maintainer adds/modifies metadata
+
+```
+Schedule (daily) or push to main
+  → fdroid checkupdates (checks all repos for new tags)
+  → If new version found: download APK from developer's release
+  → apksigner verify (reject if signature invalid)
+  → exodus-standalone scan (informational, logged)
+  → fdroid update (regenerate signed index with new APKs)
+  → Deploy repo/ to Vercel
+```
+
 ## Security Model
 
 ### Repository Signing
-- The repo index is signed with a GPG key owned by DojoCodingLabs
-- The keystore is stored as a GitHub Actions secret
+- The repo index is signed with a keystore owned by DojoCodingLabs
+- Stored as `FDROID_KEYSTORE_BASE64` in GitHub Actions secrets
 - Clients verify the signature before trusting the index
-- Key rotation documented in `docs/KEY_ROTATION.md`
+- Key rotation requires all users to re-add the repo
 
-### APK Verification
-- Each APK must be signed by the developer's own key
-- We verify the signature but do NOT re-sign APKs
-- The developer retains full control of their signing key
-- Updates must be signed with the same key as the original submission
+### APK Integrity
+- APKs are fetched directly from the developer's official releases
+- We verify the APK is properly signed (`apksigner verify`)
+- We do NOT re-sign APKs — the developer's signature is preserved
+- Updates must be signed with the same key as the original
 
-### Tracker Scanning
-- Exodus Privacy's `exodus-standalone` scans for known tracking SDKs
-- Results are **informational** (displayed in the repo browser), not blocking
-- Startups are encouraged to minimize tracking, but it's their decision
+### Tracker Transparency
+- `exodus-standalone` scans detect known tracking SDKs
+- Results are **informational** — displayed in metadata, not blocking
+- Startups decide their own privacy posture
 
-## Keep Android Open: Resilience Plan
+## Onboarding Flow
 
-### Phase 1: Now through September 2026
-- Marketplace works normally on any Android device
-- Users add repo URL in their F-Droid client
-- No Google dependencies in the distribution chain
+### For Startups (the app developer)
 
-### Phase 2: September 2026+ (post-verification mandate)
-- Stock Android may block APKs from non-registered developers
-- Document Google's "Advanced Flow" (10-step workaround) for users
-- Create help page with step-by-step guide
-- Consider registering DojoCodingLabs as an umbrella publisher if required
-- Support the Keep Android Open campaign (https://keepandroidopen.org/)
+1. Publish signed APK as a GitHub Release on their own repo
+2. Open an issue on this repo with the app submission template
+3. Done — maintainer handles the rest
 
-### Phase 3: Contingency (if Google removes Advanced Flow)
-- Custom ROMs (GrapheneOS, CalyxOS, LineageOS, /e/OS) are unaffected
-- Position marketplace as the default repo for these ROMs
-- Publish installation guides for alternative ROMs
-- Explore partnerships with ROM maintainers
+### For Maintainers (DojoCodingLabs team)
 
-### What Does NOT Change
-- The repo format (F-Droid-compatible) works regardless of Google's decisions
-- APK signing by developers remains the same
-- The CI/CD pipeline is unaffected
-- Custom ROM users are never impacted
+1. Verify the startup's connection to a DojoCodingLabs program
+2. Create `metadata/<package-name>.yml` with correct repo URL
+3. Set `UpdateCheckMode: Tags` so future versions are auto-detected
+4. Push to main — pipeline fetches, scans, indexes, deploys
+5. Reply to the issue confirming the app is live
 
-## Technology Stack
-
-| Component | Technology | Why |
-|-----------|-----------|-----|
-| Repo generation | fdroidserver (Python) | Official F-Droid tooling, well-maintained |
-| Hosting | Vercel | CDN, security headers, same as DojoOS |
-| CI/CD | GitHub Actions | Native to the repo, free for public repos |
-| APK validation | apksigner, aapt2 | Android SDK tools, standard |
-| Tracker scanning | exodus-standalone | Exodus Privacy, FOSS |
-| Client apps | Droid-ify, Neo Store | Modern F-Droid clients |
+See [SUBMISSION_GUIDE.md](SUBMISSION_GUIDE.md) for the detailed maintainer workflow.
 
 ## Future Enhancements
 
 ### Phase 2: Reproducible Builds
-- Verify that APKs match source code using `rbtlog` (IzzyOnDroid's tool)
-- Display verification badges in the repo index
-- Integrate with Codeberg/GitHub for source verification
+- Verify that APKs match source code using `rbtlog`
+- Display verification badges in the index
 
 ### Phase 3: Web Portal
-- Landing page with app catalog (Material for MkDocs or similar)
-- Search and filtering by category, hackathon, toolkit usage
+- Landing page with app catalog (Material for MkDocs)
+- Search/filter by category, hackathon, toolkit usage
 - Download statistics
-- Developer profiles linked to DojoOS Launchpad
 
-### Phase 4: Automated Updates
-- Watch developer repos for new releases
-- Auto-submit PRs when new APKs are detected
-- Notification system for maintainers
+### Phase 4: Automated Onboarding
+- Bot that watches for new issues with the submission template
+- Auto-generates metadata YAML from the issue fields
+- Opens a PR for maintainer review
+- Reduces maintainer effort to a single approval click
