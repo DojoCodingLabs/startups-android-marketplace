@@ -21,3 +21,20 @@ Thumbs.db
 __pycache__/
 *.pyc
 .venv/
+
+# --- apps/web ---
+apps/web/node_modules/
+apps/web/dist/
+
+# --- apps/mobile ---
+apps/mobile/.dart_tool/
+apps/mobile/build/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/.packages
+apps/mobile/android/.gradle/
+apps/mobile/android/local.properties
+
+# --- packages/tokens ---
+packages/tokens/node_modules/
+packages/tokens/build/

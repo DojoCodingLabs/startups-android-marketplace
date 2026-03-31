@@ -1,10 +1,25 @@
 # startups-android-marketplace
 
-F-Droid-compatible repository for Android apps built by startups incubated or accelerated through [DojoCodingLabs](https://github.com/DojoCodingLabs) hackathons and the [DojoOS Launchpad](https://dojocoding.io).
+F-Droid-compatible repository **and** cross-platform marketplace for Android apps built by startups incubated or accelerated through [DojoCodingLabs](https://github.com/DojoCodingLabs) hackathons and the [DojoOS Launchpad](https://dojocoding.io).
+
+## Monorepo Structure
+
+```
+apps/
+  web/          React 19 + Vite + Tailwind (marketplace web UI)
+  mobile/       Flutter (Android marketplace app, dev/prod flavors)
+packages/
+  tokens/       Style Dictionary pipeline (tokens.json -> CSS + Dart)
+infra/
+  config.yml    fdroidserver configuration
+  metadata/     F-Droid app metadata YAMLs
+docs/           Architecture docs, submission guide, advocacy
+go-to-market/   Ship plan and checkpoints
+```
 
 ## For Users
 
-Add this repository to your F-Droid client (Droid-ify, Neo Store, or F-Droid):
+Add the F-Droid repository to your client (Droid-ify, Neo Store, or F-Droid):
 
 ```
 https://marketplace.dojocoding.io/fdroid/repo
@@ -51,17 +66,42 @@ Just publish a new release on your own repo. Our pipeline periodically checks fo
 
 We handle all of that. You just publish releases on your own repo.
 
+## Development
+
+### Web app
+
+```bash
+cd packages/tokens && npm install && npm run build
+cd apps/web && npm install && npm run dev
+```
+
+### Mobile app
+
+```bash
+cd apps/mobile && flutter pub get
+flutter run --target lib/main_dev.dart    # dev flavor
+flutter run --target lib/main_prod.dart   # prod flavor
+```
+
+### Design tokens
+
+```bash
+cd packages/tokens && npm run build
+```
+
+Outputs CSS variables (for web) and a Dart class (for mobile). See [packages/tokens/README.md](packages/tokens/README.md) for details.
+
 ## How It Works
 
 ```
 Startup publishes APK on their own GitHub Releases
-  → Startup opens issue requesting inclusion
-  → Maintainer adds metadata pointing to startup's repo
-  → Pipeline fetches APK from startup's release page
-  → APK scanned (signature, trackers)
-  → fdroidserver generates signed index
-  → Vercel deploys to CDN
-  → Users see the app in their F-Droid client
+  -> Startup opens issue requesting inclusion
+  -> Maintainer adds metadata pointing to startup's repo
+  -> Pipeline fetches APK from startup's release page
+  -> APK scanned (signature, trackers)
+  -> fdroidserver generates signed index
+  -> Vercel deploys to CDN
+  -> Users see the app in their F-Droid client
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the complete technical design.
@@ -74,6 +114,9 @@ Starting September 2026, Google's Android Developer Verification Program may res
 
 | Component | Tool |
 |-----------|------|
+| Web frontend | React 19 + Vite + Tailwind CSS |
+| Mobile app | Flutter (Android) |
+| Design tokens | Style Dictionary |
 | Repo generation | fdroidserver |
 | APK sourcing | Fetched from developer's own releases |
 | Hosting | Vercel (CDN + security headers) |
